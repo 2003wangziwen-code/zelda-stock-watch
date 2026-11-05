@@ -92,19 +92,25 @@ def fetch_status():
         context = browser.new_context(locale="zh-CN", timezone_id="Asia/Shanghai")
         page = context.new_page()
         try:
-            response = page.goto(URL, wait_until="domcontentloaded", timeout=45000)
-            if not response or response.status >= 400:
-                print(f"Unknown: HTTP {response.status if response else 'no response'}")
-                return "unknown"
-            # Wait for asynchronous stock controls, without treating a timeout as available.
-            try:
-                page.get_by_text("主号", exact=False).first.wait_for(timeout=12000)
-            except Exception:
-                pass
-            page.wait_for_timeout(1500)
-            return detect_stock(page)
-        except Exception as exc:
-            print(f"Unknown: page load/detection error: {type(exc).__name__}: {exc}")
+            # This site intermittently returns an empty/delayed app shell.
+            # Retry unknown states only; never interpret an error as restock.
+            for attempt in range(1, 4):
+                try:
+                    response = page.goto(URL, wait_until="domcontentloaded", timeout=30000)
+                    if not response or response.status >= 400:
+                        print(f"Attempt {attempt}: unknown HTTP {response.status if response else 'no response'}")
+                        continue
+                    try:
+                        page.get_by_text("主号", exact=False).first.wait_for(timeout=9000)
+                    except Exception:
+                        pass
+                    page.wait_for_timeout(1200)
+                    status = detect_stock(page)
+                    print(f"Attempt {attempt}: {status}")
+                    if status != "unknown":
+                        return status
+                except Exception as exc:
+                    print(f"Attempt {attempt}: unknown page error: {type(exc).__name__}: {exc}")
             return "unknown"
         finally:
             context.close()
