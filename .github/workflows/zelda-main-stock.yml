@@ -31,6 +31,16 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
+      - name: Verify scheduled monitoring flag
+        env:
+          STOCK_ENABLED: ${{ vars.ZELDA_STOCK_MONITOR_ENABLED }}
+        shell: bash
+        run: |
+          if [ "$STOCK_ENABLED" = "true" ]; then
+            echo "ZELDA_STOCK_MONITOR_ENABLED: true (scheduled monitoring is enabled)"
+          else
+            echo "ZELDA_STOCK_MONITOR_ENABLED: not true (scheduled monitoring is disabled)"
+          fi
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
