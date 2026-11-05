@@ -1,0 +1,66 @@
+name: Zelda main-account restock watcher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'zelda-stock-watch/**'
+      - '.github/workflows/zelda-main-stock.yml'
+  schedule:
+    - cron: "2/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Test detection without sending email"
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: zelda-main-account-watch
+  cancel-in-progress: false
+
+jobs:
+  check:
+    # Scheduled monitoring is gated until the site has been verified and
+    # repository variable ZELDA_STOCK_MONITOR_ENABLED=true is configured.
+    if: ${{ github.event_name != 'schedule' || vars.ZELDA_STOCK_MONITOR_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install browser
+        run: |
+          python -m pip install "playwright>=1.50,<2"
+          python -m playwright install --with-deps chromium
+      - name: Verify main/deputy isolation
+        run: python -m unittest discover -s zelda-stock-watch -p "test_*.py"
+      - name: Check main-account stock
+        id: check
+        env:
+          DRY_RUN: ${{ github.event_name == 'push' && '1' || (github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0') }}
+          ZELDA_SMTP_USER: ${{ secrets.ZELDA_SMTP_USER }}
+          ZELDA_SMTP_APP_PASSWORD: ${{ secrets.ZELDA_SMTP_APP_PASSWORD }}
+          ZELDA_EMAIL_TO: ${{ secrets.ZELDA_EMAIL_TO }}
+          ZELDA_SMTP_HOST: ${{ secrets.ZELDA_SMTP_HOST }}
+          ZELDA_SMTP_PORT: ${{ secrets.ZELDA_SMTP_PORT }}
+        run: python zelda-stock-watch/watch.py
+      - name: Save sent-alert state
+        if: ${{ steps.check.outputs.notified == 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add zelda-stock-watch/state.json
+          git commit -m "Record Zelda main-account restock alert"
+          git push
+      - name: Stop monitoring after first successful alert
+        if: ${{ steps.check.outputs.notified == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/zelda-main-stock.yml/disable"
