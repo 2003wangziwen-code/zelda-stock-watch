@@ -86,7 +86,7 @@ def detect_stock(page):
 
 def fetch_status():
     with sync_playwright() as pw:
-        browser = pw.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])
+        browser = pw.chromium.launch(channel="chrome", headless=True, args=["--disable-dev-shm-usage"])
         context = browser.new_context(locale="zh-CN", timezone_id="Asia/Shanghai")
         page = context.new_page()
         try:
