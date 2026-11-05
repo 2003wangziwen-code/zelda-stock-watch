@@ -14,10 +14,11 @@
 
 1. 打开 [仓库主页](https://github.com/2003wangziwen-code/zelda-stock-watch)，点击右上方的 **Watch → Custom → Issues** 并保存（或 Watch → All Activity）。这样能订阅仓库创建的新 Issue。
 2. 打开 [GitHub 通知设置](https://github.com/settings/notifications)，在 **Subscriptions → Watching** 选择 **Email**，并确保 **Participating and @mentions** 邮件通知也开启；确认账户通知收件邮箱已验证。
-3. 配好后，在 [Actions Variables](https://github.com/2003wangziwen-code/zelda-stock-watch/settings/variables/actions) 新建仓库变量 **ZELDA_STOCK_MONITOR_ENABLED**，值设为 **true**。在这之前定时任务已配置但会跳过。
-4. 可以在 [Actions](https://github.com/2003wangziwen-code/zelda-stock-watch/actions) 手动运行 `Zelda main-account restock watcher`，保留 `dry_run=true`，只测试库存识别，不创建 Issue。主号可租后会自动创建标题为 `【主号补货】塞尔达传说：时之笛` 的 Issue，并尝试在发出唯一 Issue 后停止任务。
+3. 配置好后，运行 [GitHub Issue 邮件通知测试](https://github.com/2003wangziwen-code/zelda-stock-watch/actions/workflows/zelda-issue-test.yml) → **Run workflow**，该测试会创建一个明确标注“非补货”的测试 Issue，并 @ 提及和分配给仓库拥有者；确认 GitHub 是否向你的邮箱发送通知。此测试只需运行一次。
+4. 确认测试邮件到达后，在 [Actions Variables](https://github.com/2003wangziwen-code/zelda-stock-watch/settings/variables/actions) 新建仓库变量 **ZELDA_STOCK_MONITOR_ENABLED**，值设为 **true**。在这之前定时任务已配置但会跳过。
+5. 可以在 [Actions](https://github.com/2003wangziwen-code/zelda-stock-watch/actions) 手动运行 `Zelda main-account restock watcher`，保留 `dry_run=true`，只测试库存识别，不创建 Issue。主号可租后会自动创建标题为 `【主号补货】塞尔达传说：时之笛` 的 Issue，并尝试在发出唯一 Issue 后停止任务。
 
-邮件是否成功投递必须经过实际的 **Issue 通知测试** 验证（用户启用上述设置后可通过手工创建明确标为“测试”的 Issue 进行验证）。仅看见 Actions 成功并不等于邮箱已经收到提醒。
+邮件是否成功投递必须经过实际的 **Issue 通知测试** 验证。仅看见 Actions 成功并不等于邮箱已经收到提醒。如未收到，可检查垃圾邮件、GitHub 账户邮箱验证及通知设置。
 
 ## 检测原则
 
