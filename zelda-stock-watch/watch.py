@@ -51,6 +51,8 @@ def detect_stock(page):
     body = page.locator("body").inner_text(timeout=15000)
     if GAME not in body:
         print("Unknown: game title absent in rendered page.")
+        print(f"Page URL: {page.url!r}; browser title: {page.title()!r}")
+        print(f"Visible body preview (public site): {body[:1600]!r}")
         return "unknown"
     statuses = []
     option_selector = "button, label, [role='option'], [role='radio'], [role='button']"
