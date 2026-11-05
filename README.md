@@ -1,32 +1,34 @@
-# 《塞尔达传说：时之笛》主号补货提醒
+# 《塞尔达传说：时之笛》主号补货监控
 
-监控页面：https://manygames.cn/games/library/cmw0iuzvc00gj01novq1f8s0d
+租赁页面：https://manygames.cn/games/library/cmw0iuzvc00gj01novq1f8s0d
 
-本仓库使用 GitHub Actions + Playwright 浏览器，每5分钟检查一次页面，只在“主号”出现明确可租信息时发出一次电子邮件。**副号补货不能触发。** GitHub Actions 定时任务可能延迟运行，不代表精确5分钟。
+使用 GitHub Actions 每5分钟启动一次检测（GitHub 调度可能延迟），通过 Playwright Chrome 读取主号库存。只检测“主号”，副号补货绝不触发；页面异常/数据不完整时不提示。
 
-## 当前部署状态
-代码提交后会自动执行一次只读试运行。**正式邮件监控默认关闭**，需要先确认网站可以检测、配置发件邮箱，并在 Actions Variables 中启用。站点采用动态数据，无法识别时会记录 unknown 并保持静默，避免误报。
+## 邮件通知方式（无 SMTP、无邮箱密码）
 
-## 邮箱配置
-在 [仓库设置](https://github.com/2003wangziwen-code/zelda-stock-watch/settings/secrets/actions) 的 **Secrets → New repository secret** 添加：
-- `ZELDA_SMTP_USER`：发件 Gmail 地址
-- `ZELDA_SMTP_APP_PASSWORD`：Gmail 应用专用密码（不是登录密码，通常需开启两步验证）
-- `ZELDA_EMAIL_TO`：收件邮箱
+注意：GitHub 已在2026-10-15终止 **Push 事件专用邮件通知**。因此本方案**不使用 Push 邮件**，而是在主号明确补货后，创建一条 **GitHub Issue**，并将仓库拥有者设为受理人、在正文中 @ 提及。GitHub 的 Issue 通知可以按账号的邮件通知设置投递，投递成功与否依赖 GitHub 的邮件设置。
 
-如果不是 Gmail，可选添加 `ZELDA_SMTP_HOST`、`ZELDA_SMTP_PORT`（默认 smtp.gmail.com:465）。
+本仓库是公开仓库，所有 Issue 和运行日志都公开；Issue 仅写游戏、库存和时间，**不会放入邮箱地址、密码或账号信息**。无需配置任何 GitHub Secrets 或 Gmail 授权凭据。
 
-注意：不要将密码提交到代码、Issue 或聊天。
+## 你的设置（必须完成）
 
-## 启用流程
-1. 进入 [Actions](https://github.com/2003wangziwen-code/zelda-stock-watch/actions) → **Zelda main-account restock watcher**，看试运行日志，确认出现 Main account status: sold_out。若出现 unknown，说明当前页面未能可靠识别，不能直接启用。
-2. 完成前述邮箱 Secrets 的配置，然后进入 [Actions](https://github.com/2003wangziwen-code/zelda-stock-watch/actions) → **Zelda email configuration test** → **Run workflow**。收到标题含“测试成功”的邮件后，确认 SMTP 通道可用。这是测试邮件，不代表补货。
-3. 在 [Actions Variables](https://github.com/2003wangziwen-code/zelda-stock-watch/settings/variables/actions) 新增名为 `ZELDA_STOCK_MONITOR_ENABLED`、值为 `true` 的仓库变量。这会启动每5分钟的检查。
-4. 库存确认后发邮件，并写入 `zelda-stock-watch/state.json` 防止重复发送；流程会尝试自动关闭自己。若没有确认主号明确可租，程序不会发邮件。
+1. 打开 [仓库主页](https://github.com/2003wangziwen-code/zelda-stock-watch)，点击右上方的 **Watch → Custom → Issues** 并保存（或 Watch → All Activity）。这样能订阅仓库创建的新 Issue。
+2. 打开 [GitHub 通知设置](https://github.com/settings/notifications)，在 **Subscriptions → Watching** 选择 **Email**，并确保 **Participating and @mentions** 邮件通知也开启；确认账户通知收件邮箱已验证。
+3. 配好后，在 [Actions Variables](https://github.com/2003wangziwen-code/zelda-stock-watch/settings/variables/actions) 新建仓库变量 **ZELDA_STOCK_MONITOR_ENABLED**，值设为 **true**。在这之前定时任务已配置但会跳过。
+4. 可以在 [Actions](https://github.com/2003wangziwen-code/zelda-stock-watch/actions) 手动运行 `Zelda main-account restock watcher`，保留 `dry_run=true`，只测试库存识别，不创建 Issue。主号可租后会自动创建标题为 `【主号补货】塞尔达传说：时之笛` 的 Issue，并尝试在发出唯一 Issue 后停止任务。
 
-GitHub Actions 在公开仓库的标准托管运行器免费，但 GitHub 可能延迟或暂停计划任务。原有 ChatGPT 每小时补货监控可作为备用。
+邮件是否成功投递必须经过实际的 **Issue 通知测试** 验证（用户启用上述设置后可通过手工创建明确标为“测试”的 Issue 进行验证）。仅看见 Actions 成功并不等于邮箱已经收到提醒。
 
-## 工作方式和测试
-- 使用 Playwright 控制 GitHub Ubuntu 运行器预装的 Chrome 渲染页面；网页加载不完整时最多尝试3次。
-- 只接受对应主号选项的明确正库存文案，且没有任何主号已售罄证据；副号、混合标签和无法判定均不提醒。
-- 邮件发送成功后才保存通知记录，避免邮件失败造成漏报。
-- 首次代码推送会运行检测测试和实时页面只读检查，**不会发送邮件**。
+## 检测原则
+
+- 通过 Chrome 加载网页的动态库存，最多重试3次；无法明确识别视为 unknown。
+- 当主号出现明确可租信息且没有售罄证据时，再发起第二次独立检测；两次均明确可租才触发通知。
+- GitHub Issue 使用仓库内置 GITHUB_TOKEN 创建，不需要任何用户外部访问令牌。
+- 对已发出的补货 Issue 按标题去重，并写入 `zelda-stock-watch/state.json` 防止重复提醒。脚本尝试停用监控工作流。
+- 代码推送默认是测试模式，不会创建补货 Issue。
+
+## 状态
+
+程序曾于2026-11-05在 GitHub 运行器中实际识别到 `主号（已售罄）`。真实“补货”触发与 Issue 邮件投递还未发生、未做端到端验证。保留原 ChatGPT 每小时监控作为备用。
+
+GitHub 官方说明：[配置 GitHub 通知](https://docs.github.com/en/subscriptions-and-notifications/get-started/configuring-notifications)，[Push 邮件功能已于2026-10-15退役](https://github.blog/changelog/2026-10-15-email-notifications-for-repository-push-events-have-been-retired/)。
