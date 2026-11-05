@@ -1,0 +1,49 @@
+name: Zelda email configuration test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smtp-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Send a one-time test email (no stock check)
+        env:
+          ZELDA_SMTP_USER: ${{ secrets.ZELDA_SMTP_USER }}
+          ZELDA_SMTP_APP_PASSWORD: ${{ secrets.ZELDA_SMTP_APP_PASSWORD }}
+          ZELDA_EMAIL_TO: ${{ secrets.ZELDA_EMAIL_TO }}
+          ZELDA_SMTP_HOST: ${{ secrets.ZELDA_SMTP_HOST }}
+          ZELDA_SMTP_PORT: ${{ secrets.ZELDA_SMTP_PORT }}
+        run: |
+          python - <<'PY'
+          import os
+          import smtplib
+          from email.message import EmailMessage
+          from datetime import datetime, timezone
+
+          user = os.environ.get("ZELDA_SMTP_USER", "")
+          password = os.environ.get("ZELDA_SMTP_APP_PASSWORD", "")
+          recipient = os.environ.get("ZELDA_EMAIL_TO", "")
+          if not all((user, password, recipient)):
+              raise SystemExit("Email Secrets missing; set ZELDA_SMTP_USER, ZELDA_SMTP_APP_PASSWORD, ZELDA_EMAIL_TO.")
+          host = os.environ.get("ZELDA_SMTP_HOST") or "smtp.gmail.com"
+          port = int(os.environ.get("ZELDA_SMTP_PORT") or "465")
+          msg = EmailMessage()
+          msg["From"] = user
+          msg["To"] = recipient
+          msg["Subject"] = "【测试成功】时之笛主号补货邮件通知"
+          msg.set_content(
+              "这是GitHub Actions邮件配置测试，不代表主号补货。\n"
+              "邮件通道测试时间（UTC）："
+              + datetime.now(timezone.utc).isoformat()
+              + "\n如果收到本邮件，说明SMTP发件配置可用。\n"
+          )
+          with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
+              smtp.login(user, password)
+              smtp.send_message(msg)
+          print("Test email submitted to SMTP server successfully.")
+          PY
