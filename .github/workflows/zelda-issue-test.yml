@@ -1,0 +1,39 @@
+name: Zelda GitHub Issue notification test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  test-notification:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - name: Create a clearly labeled TEST Issue (never a restock alert)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          title='【测试通知｜非补货】时之笛监控邮件链路'
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 100 \
+            --json title,url --jq '.[] | select(.title == "【测试通知｜非补货】时之笛监控邮件链路") | .url' | head -n 1)
+          if [ -n "$existing" ]; then
+            echo "Test Issue already exists: $existing"
+            echo 'No new Issue was created. Close or delete it before retesting.'
+            exit 0
+          fi
+          cat > test_issue.md <<EOF
+          @$GITHUB_REPOSITORY_OWNER
+
+          **这是 GitHub Issue 邮件通知链路测试，不代表主号补货。**
+
+          这条测试 Issue 由 GitHub Actions 创建。如果已关注本仓库 Issues
+          并启用 GitHub 的邮件通知，请检查收件箱及垃圾邮件。
+
+          正式补货时将另行创建标题为【主号补货】的 Issue。
+          EOF
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" \
+            --body-file test_issue.md --assignee "$GITHUB_REPOSITORY_OWNER"
