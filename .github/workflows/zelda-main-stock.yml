@@ -27,7 +27,7 @@ concurrency:
 jobs:
   check:
     # Scheduled runs remain off until repository variable is explicitly enabled.
-    if: \${{ github.event_name != 'schedule' || vars.ZELDA_STOCK_MONITOR_ENABLED == 'true' }}
+    if: ${{ github.event_name != 'schedule' || vars.ZELDA_STOCK_MONITOR_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
@@ -42,14 +42,14 @@ jobs:
       - name: Check main-account stock
         id: stock
         env:
-          DRY_RUN: \${{ github.event_name == 'push' && '1' || (github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0') }}
+          DRY_RUN: ${{ github.event_name == 'push' && '1' || (github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0') }}
         run: python zelda-stock-watch/watch.py
       - name: Create one GitHub Issue to trigger native notifications
         id: alert
-        if: \${{ steps.stock.outputs.restocked == 'true' }}
+        if: ${{ steps.stock.outputs.restocked == 'true' }}
         env:
-          GH_TOKEN: \${{ github.token }}
-          CHECKED_AT: \${{ steps.stock.outputs.checked_at }}
+          GH_TOKEN: ${{ github.token }}
+          CHECKED_AT: ${{ steps.stock.outputs.checked_at }}
         shell: bash
         run: |
           set -euo pipefail
@@ -79,10 +79,10 @@ jobs:
           fi
           echo "issue_url=$issue_url" >> "$GITHUB_OUTPUT"
       - name: Persist one-time notification record
-        if: \${{ steps.alert.outputs.issue_url != '' }}
+        if: ${{ steps.alert.outputs.issue_url != '' }}
         env:
-          ISSUE_URL: \${{ steps.alert.outputs.issue_url }}
-          CHECKED_AT: \${{ steps.stock.outputs.checked_at }}
+          ISSUE_URL: ${{ steps.alert.outputs.issue_url }}
+          CHECKED_AT: ${{ steps.stock.outputs.checked_at }}
         shell: bash
         run: |
           python - <<'PY'
@@ -101,7 +101,7 @@ jobs:
           git commit -m "Record one-time Zelda main-account restock Issue"
           git push
       - name: Disable schedule after notifying
-        if: \${{ steps.alert.outputs.issue_url != '' }}
+        if: ${{ steps.alert.outputs.issue_url != '' }}
         env:
-          GH_TOKEN: \${{ github.token }}
+          GH_TOKEN: ${{ github.token }}
         run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/zelda-main-stock.yml/disable"
