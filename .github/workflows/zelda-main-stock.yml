@@ -11,13 +11,14 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Test detection without sending email"
+        description: "Test stock detection without creating a notification Issue"
         type: boolean
         default: true
 
 permissions:
   contents: write
   actions: write
+  issues: write
 
 concurrency:
   group: zelda-main-account-watch
@@ -25,9 +26,8 @@ concurrency:
 
 jobs:
   check:
-    # Scheduled monitoring is gated until the site has been verified and
-    # repository variable ZELDA_STOCK_MONITOR_ENABLED=true is configured.
-    if: ${{ github.event_name != 'schedule' || vars.ZELDA_STOCK_MONITOR_ENABLED == 'true' }}
+    # Scheduled runs remain off until repository variable is explicitly enabled.
+    if: \${{ github.event_name != 'schedule' || vars.ZELDA_STOCK_MONITOR_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 6
     steps:
@@ -40,25 +40,68 @@ jobs:
       - name: Verify main/deputy isolation
         run: python -m unittest discover -s zelda-stock-watch -p "test_*.py"
       - name: Check main-account stock
-        id: check
+        id: stock
         env:
-          DRY_RUN: ${{ github.event_name == 'push' && '1' || (github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0') }}
-          ZELDA_SMTP_USER: ${{ secrets.ZELDA_SMTP_USER }}
-          ZELDA_SMTP_APP_PASSWORD: ${{ secrets.ZELDA_SMTP_APP_PASSWORD }}
-          ZELDA_EMAIL_TO: ${{ secrets.ZELDA_EMAIL_TO }}
-          ZELDA_SMTP_HOST: ${{ secrets.ZELDA_SMTP_HOST }}
-          ZELDA_SMTP_PORT: ${{ secrets.ZELDA_SMTP_PORT }}
+          DRY_RUN: \${{ github.event_name == 'push' && '1' || (github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0') }}
         run: python zelda-stock-watch/watch.py
-      - name: Save sent-alert state
-        if: ${{ steps.check.outputs.notified == 'true' }}
+      - name: Create one GitHub Issue to trigger native notifications
+        id: alert
+        if: \${{ steps.stock.outputs.restocked == 'true' }}
+        env:
+          GH_TOKEN: \${{ github.token }}
+          CHECKED_AT: \${{ steps.stock.outputs.checked_at }}
+        shell: bash
         run: |
+          set -euo pipefail
+          title='【主号补货】塞尔达传说：时之笛'
+          existing=$(gh issue list --repo "$GITHUB_REPOSITORY" --state all --limit 100 \
+            --json title,url --jq '.[] | select(.title == "【主号补货】塞尔达传说：时之笛") | .url' | head -n 1)
+          if [ -n "$existing" ]; then
+            issue_url="$existing"
+            echo "Existing alert Issue: $issue_url"
+          else
+            cat > restock_issue.md <<EOF
+          @$GITHUB_REPOSITORY_OWNER
+
+          GitHub Actions 已连续两次在游戏详情页识别到 **主号可租**。
+
+          - 游戏：《塞尔达传说：时之笛 重制版》
+          - 检查时间（北京时间）：$CHECKED_AT
+          - **租赁页面：https://manygames.cn/games/library/cmw0iuzvc00gj01novq1f8s0d**
+          - 仅监控主号；副号状态不能触发本通知
+
+          库存可能随时变化，请以打开页面后的实际可租状态为准。
+          EOF
+            issue_url=$(gh issue create --repo "$GITHUB_REPOSITORY" \
+              --title "$title" --body-file restock_issue.md \
+              --assignee "$GITHUB_REPOSITORY_OWNER")
+            echo "Created restock Issue: $issue_url"
+          fi
+          echo "issue_url=$issue_url" >> "$GITHUB_OUTPUT"
+      - name: Persist one-time notification record
+        if: \${{ steps.alert.outputs.issue_url != '' }}
+        env:
+          ISSUE_URL: \${{ steps.alert.outputs.issue_url }}
+          CHECKED_AT: \${{ steps.stock.outputs.checked_at }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          p = Path("zelda-stock-watch/state.json")
+          p.write_text(json.dumps({
+              "notified": True, "checked_at": os.environ["CHECKED_AT"],
+              "issue_url": os.environ["ISSUE_URL"],
+              "url": "https://manygames.cn/games/library/cmw0iuzvc00gj01novq1f8s0d"
+          }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add zelda-stock-watch/state.json
-          git commit -m "Record Zelda main-account restock alert"
+          git commit -m "Record one-time Zelda main-account restock Issue"
           git push
-      - name: Stop monitoring after first successful alert
-        if: ${{ steps.check.outputs.notified == 'true' }}
+      - name: Disable schedule after notifying
+        if: \${{ steps.alert.outputs.issue_url != '' }}
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: \${{ github.token }}
         run: gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/zelda-main-stock.yml/disable"
