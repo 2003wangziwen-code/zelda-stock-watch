@@ -3,9 +3,7 @@
 import json
 import os
 import re
-import smtplib
 from datetime import datetime
-from email.message import EmailMessage
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -117,55 +115,34 @@ def fetch_status():
             browser.close()
 
 
-def email_alert():
-    username = os.environ.get("ZELDA_SMTP_USER", "")
-    password = os.environ.get("ZELDA_SMTP_APP_PASSWORD", "")
-    recipient = os.environ.get("ZELDA_EMAIL_TO", "")
-    if not username or not password or not recipient:
-        raise RuntimeError("Missing ZELDA_SMTP_USER, ZELDA_SMTP_APP_PASSWORD, or ZELDA_EMAIL_TO")
-    host = os.environ.get("ZELDA_SMTP_HOST") or "smtp.gmail.com"
-    port = int(os.environ.get("ZELDA_SMTP_PORT") or "465")
-    checked_at = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
-    mail = EmailMessage()
-    mail["Subject"] = "【主号补货提醒】塞尔达传说：时之笛"
-    mail["From"] = username
-    mail["To"] = recipient
-    mail.set_content(
-        f"监控页面检测到《塞尔达传说：时之笛》的“主号”出现明确可租标识。\n"
-        f"检查时间（北京时间）：{checked_at}\n"
-        f"立即查看：{URL}\n\n"
-        "库存会随时变化，请以打开页面后的实际可租状态为准。"
-    )
-    with smtplib.SMTP_SSL(host, port, timeout=30) as smtp:
-        smtp.login(username, password)
-        smtp.send_message(mail)
-    return checked_at
-
-
 def main():
+    """The workflow creates the notification Issue; the Python checker never sends mail."""
     if STATE_FILE.exists():
         saved = json.loads(STATE_FILE.read_text(encoding="utf-8"))
         if saved.get("notified"):
-            print("Previously notified: no further mail.")
+            print("Previously notified via GitHub Issue; monitoring complete.")
             return
     status = fetch_status()
     print(f"Main account status: {status}")
     if status != "available":
         return
     if os.getenv("DRY_RUN", "0") == "1":
-        print("DRY_RUN: available, but no email/state change.")
+        print("DRY_RUN: detected available; will not create an alert Issue.")
         return
-    checked_at = email_alert()  # Failure here MUST NOT mark as notified.
-    STATE_FILE.write_text(
-        json.dumps({"notified": True, "checked_at": checked_at, "url": URL},
-                   ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    # Two positive checks guard against temporary or inconsistent site state.
+    verification = fetch_status()
+    print(f"Confirmation status: {verification}")
+    if verification != "available":
+        print("No Issue: positive result was not independently confirmed.")
+        return
+    checked_at = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y-%m-%d %H:%M:%S")
     output = os.getenv("GITHUB_OUTPUT")
-    if output:
-        with open(output, "a", encoding="utf-8") as f:
-            f.write("notified=true\n")
-    print("Alert sent; state updated for one-time notification.")
+    if not output:
+        raise RuntimeError("GITHUB_OUTPUT unavailable: refusing to trigger alert without Actions context")
+    with open(output, "a", encoding="utf-8") as f:
+        f.write("restocked=true\n")
+        f.write(f"checked_at={checked_at}\n")
+    print("Main-account availability confirmed twice; GitHub Issue step may notify.")
 
 
 if __name__ == "__main__":
