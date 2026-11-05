@@ -19,14 +19,14 @@
 
 ## 启用流程
 1. 进入 [Actions](https://github.com/2003wangziwen-code/zelda-stock-watch/actions) → **Zelda main-account restock watcher**，看试运行日志，确认出现 Main account status: sold_out。若出现 unknown，说明当前页面未能可靠识别，不能直接启用。
-2. 完成前述邮箱 Secrets 的配置。
+2. 完成前述邮箱 Secrets 的配置，然后进入 [Actions](https://github.com/2003wangziwen-code/zelda-stock-watch/actions) → **Zelda email configuration test** → **Run workflow**。收到标题含“测试成功”的邮件后，确认 SMTP 通道可用。这是测试邮件，不代表补货。
 3. 在 [Actions Variables](https://github.com/2003wangziwen-code/zelda-stock-watch/settings/variables/actions) 新增名为 `ZELDA_STOCK_MONITOR_ENABLED`、值为 `true` 的仓库变量。这会启动每5分钟的检查。
 4. 库存确认后发邮件，并写入 `zelda-stock-watch/state.json` 防止重复发送；流程会尝试自动关闭自己。若没有确认主号明确可租，程序不会发邮件。
 
 GitHub Actions 在公开仓库的标准托管运行器免费，但 GitHub 可能延迟或暂停计划任务。原有 ChatGPT 每小时补货监控可作为备用。
 
 ## 工作方式和测试
-- 使用 Playwright Chromium 渲染页面，等待网页动态加载。
+- 使用 Playwright 控制 GitHub Ubuntu 运行器预装的 Chrome 渲染页面；网页加载不完整时最多尝试3次。
 - 只接受对应主号选项的明确正库存文案，且没有任何主号已售罄证据；副号、混合标签和无法判定均不提醒。
 - 邮件发送成功后才保存通知记录，避免邮件失败造成漏报。
 - 首次代码推送会运行检测测试和实时页面只读检查，**不会发送邮件**。
